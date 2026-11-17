@@ -43,6 +43,35 @@ public class MainActivity extends Activity {
    if(messageTimer>0){messageTimer--;box(c,w*.04f,h*.49f,w*.96f,h*.57f,0xdd173845,14);text(c,message,w*.5f,h*.538f,w*.035f,0xffffffff);postInvalidateDelayed(35);}
    if(menu){box(c,w*.08f,h*.32f,w*.92f,h*.64f,0xee102735,20);text(c,"PAUSED",w*.5f,h*.41f,w*.075f,0xffffffff);text(c,"TAP TO CONTINUE",w*.5f,h*.52f,w*.046f,0xffffd991);}
   }
-  @Override public boolean onTouchEvent(MotionEvent e){float x=e.getX(),y=e.getY(),w=getWidth(),h=getHeight();int a=e.getActionMasked();if(a==MotionEvent.ACTION_DOWN){if(menu){menu=false;invalidate();return true;}if(y>h*.89f){if(x<w*.5f){int price=level==1?90:level==2?250:600;if(level<4&&coins>=price){coins-=price;level++;message="TOOL UPGRADED!";messageTimer=65;}else{message=level>=4?"MAX LEVEL":"NEED "+price+" COINS";messageTimer=55;}}else{if(cleared>COLS*ROWS*.65f){zone++;resetMap();message="NEW DIG SITE UNLOCKED";messageTimer=90;}else{message="EXCAVATE 65% TO ADVANCE";messageTimer=70;}}save();invalidate();return true;}}dig(x,y);return true;}if(a==MotionEvent.ACTION_MOVE){dig(x,y);return true;}if(a==MotionEvent.ACTION_UP){brushX=-1;brushY=-1;save();invalidate();return true;}return true;}
+  @Override public boolean onTouchEvent(MotionEvent e) {
+   float x=e.getX(), y=e.getY(), w=getWidth(), h=getHeight();
+   int action=e.getActionMasked();
+   if(action==MotionEvent.ACTION_DOWN){
+    if(menu){menu=false;invalidate();return true;}
+    if(y>h*.89f){
+     if(x<w*.5f){
+      int price=level==1?90:level==2?250:600;
+      if(level<4 && coins>=price){
+       coins-=price;level++;message="TOOL UPGRADED!";messageTimer=65;
+      }else{
+       message=level>=4?"MAX LEVEL":"NEED "+price+" COINS";messageTimer=55;
+      }
+     }else{
+      if(cleared>COLS*ROWS*.65f){
+       zone++;resetMap();message="NEW DIG SITE UNLOCKED";messageTimer=90;
+      }else{
+       message="EXCAVATE 65% TO ADVANCE";messageTimer=70;
+      }
+     }
+     save();invalidate();return true;
+    }
+    dig(x,y);return true;
+   }
+   if(action==MotionEvent.ACTION_MOVE){dig(x,y);return true;}
+   if(action==MotionEvent.ACTION_UP || action==MotionEvent.ACTION_CANCEL){
+    brushX=-1;brushY=-1;save();invalidate();return true;
+   }
+   return true;
+  }
  }
 }
