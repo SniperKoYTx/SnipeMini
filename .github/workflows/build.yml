@@ -37,7 +37,7 @@ jobs:
           export/android/java_sdk_path = "$JAVA_HOME"
           EOF
       - name: Validate Godot project
-        run: godot --headless --path godot --editor --quit
+        run: godot --headless --verbose --path godot --editor --quit
       - name: Export Android APK
         env:
           GODOT_ANDROID_KEYSTORE_DEBUG_PATH: /home/runner/.android/debug.keystore
@@ -45,7 +45,7 @@ jobs:
           GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
         run: |
           mkdir -p godot/build
-          godot --headless --path godot --export-debug "Android" build/UNBURIED-debug.apk
+          godot --headless --verbose --path godot --export-debug "Android" build/UNBURIED-debug.apk
           test -s godot/build/UNBURIED-debug.apk
       - uses: actions/upload-artifact@v4
         with:
