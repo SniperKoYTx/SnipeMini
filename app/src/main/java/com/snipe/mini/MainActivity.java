@@ -13,7 +13,7 @@ public class MainActivity extends Activity {
  public void onCreate(Bundle b){super.onCreate(b);setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);getWindow().getDecorView().setSystemUiVisibility(5894|1024|512);game=new Engine(this);setContentView(game);}
  protected void onPause(){super.onPause();game.pause();}
  protected void onResume(){super.onResume();if(game!=null)game.resume();}
- public void onBackPressed(){game.back();}
+ protected void onDestroy(){if(game!=null)game.shutdown();super.onDestroy();}\n public void onBackPressed(){game.back();}
  static class Engine extends View {
   static final int HOME=0,PLAY=1,PAUSE=2,DEAD=3,MODES=4,SHOP=5,QUEST=6,STATS=7,OPTIONS=8,TUTORIAL=9,CHEST=10;
   final Paint p=new Paint(3); final RectF rect=new RectF(); final Random rng=new Random(812); final SharedPreferences pref;
@@ -28,7 +28,7 @@ public class MainActivity extends Activity {
   int lives=3,combo=0,maxCombo=0,near=0,bossHp=0,bossMax=0,bossNumber=0,shots=0;
   float x=480,target=480,y=425,score=0,elapsed=0,spawn=.7f,invincible=0,shield=0,magnet=0,slow=0,dash=0,dashCooldown=0,shake=0,clock=0,bossTimer=0;
   boolean touched=false,seenTutorial=false;
-  long last=System.nanoTime(),nextFrame=0; SoundPool sounds; int soundCoin,soundHit,soundPower;
+  long last=System.nanoTime(),nextFrame=0; ToneGenerator tone; int soundCoin=1,soundHit=2,soundPower=3;
   static class Obj{float x,y,w,h,speed;int kind;boolean grazed;Obj(float x,float y,float w,float h,float speed,int kind){this.x=x;this.y=y;this.w=w;this.h=h;this.speed=speed;this.kind=kind;}}
   static class Particle{float x,y,vx,vy,t;int c;Particle(float x,float y,float vx,float vy,int c){this.x=x;this.y=y;this.vx=vx;this.vy=vy;this.c=c;this.t=.5f;}}
   Engine(Context c){super(c);pref=c.getSharedPreferences("snipe_dodge_v2",0);load();setLayerType(View.LAYER_TYPE_HARDWARE,null);initSounds();}
@@ -36,9 +36,9 @@ public class MainActivity extends Activity {
   void load(){coins=get("wallet",0);best=get("best",0);runs=get("runs",0);totalCoins=get("coins",0);level=get("level",1);skin=Math.min(11,get("skin",0));unlocked=get("unlocked",1);mode=get("mode",0);world=get("world",0);achievements=get("achievements",0);dailyStamp=get("daily",0);weekStamp=get("week",0);dayCoins=get("dayCoins",0);weekRuns=get("weekRuns",0);dayRuns=get("dayRuns",0);claims=get("claims",0);fps=get("fps",60);quality=get("quality",1);control=get("control",0);music=get("music",0);effects=get("effects",1);seenTutorial=get("tutorial",0)==1;rollover();}
   void save(){pref.edit().putInt("wallet",coins).putInt("best",best).putInt("runs",runs).putInt("coins",totalCoins).putInt("level",level).putInt("skin",skin).putInt("unlocked",unlocked).putInt("mode",mode).putInt("world",world).putInt("achievements",achievements).putInt("daily",dailyStamp).putInt("week",weekStamp).putInt("dayCoins",dayCoins).putInt("weekRuns",weekRuns).putInt("dayRuns",dayRuns).putInt("claims",claims).putInt("fps",fps).putInt("quality",quality).putInt("control",control).putInt("music",music).putInt("effects",effects).putInt("tutorial",seenTutorial?1:0).apply();}
   void rollover(){Calendar c=Calendar.getInstance();int day=c.get(Calendar.YEAR)*400+c.get(Calendar.DAY_OF_YEAR);int week=c.get(Calendar.YEAR)*60+c.get(Calendar.WEEK_OF_YEAR);if(day!=dailyStamp){dailyStamp=day;dayCoins=0;dayRuns=0;claims&=~3;}if(week!=weekStamp){weekStamp=week;weekRuns=0;claims&=~4;}save();}
-  void initSounds(){try{sounds=new SoundPool(3,AudioManager.STREAM_MUSIC,0);soundCoin=tone(660);soundHit=tone(180);soundPower=tone(880);}catch(Exception e){sounds=null;}}
-  int tone(int hz){int sr=11025,n=sr/10;byte[] pcm=new byte[n*2];for(int i=0;i<n;i++){double fade=Math.pow(1-i/(double)n,2);short v=(short)(Math.sin(2*Math.PI*hz*i/sr)*fade*7000);pcm[2*i]=(byte)v;pcm[2*i+1]=(byte)(v>>8);}try{java.io.File f=java.io.File.createTempFile("sfx",".wav",getContext().getCacheDir());java.io.FileOutputStream out=new java.io.FileOutputStream(f);java.nio.ByteBuffer b=java.nio.ByteBuffer.allocate(44).order(java.nio.ByteOrder.LITTLE_ENDIAN);b.put("RIFF".getBytes());b.putInt(36+pcm.length);b.put("WAVEfmt ".getBytes());b.putInt(16);b.putShort((short)1);b.putShort((short)1);b.putInt(sr);b.putInt(sr*2);b.putShort((short)2);b.putShort((short)16);b.put("data".getBytes());b.putInt(pcm.length);out.write(b.array());out.write(pcm);out.close();int id=sounds.load(f.getAbsolutePath(),1);f.deleteOnExit();return id;}catch(Exception e){return 0;}}
-  void sfx(int id){if(effects==1&&sounds!=null&&id!=0)sounds.play(id,.16f,.16f,0,0,1);}
+  void initSounds(){try{tone=new ToneGenerator(AudioManager.STREAM_MUSIC,35);}catch(Exception e){tone=null;}}
+  void sfx(int id){if(effects==1&&tone!=null)tone.startTone(id==1?ToneGenerator.TONE_PROP_ACK:id==2?ToneGenerator.TONE_PROP_NACK:ToneGenerator.TONE_PROP_BEEP,65);}
+  void shutdown(){if(tone!=null){tone.release();tone=null;}}
   void pause(){if(state==PLAY)state=PAUSE;last=System.nanoTime();}
   void resume(){last=System.nanoTime();}
   void back(){if(state==PLAY)state=PAUSE;else if(state==PAUSE)state=PLAY;else state=HOME;last=System.nanoTime();invalidate();}
