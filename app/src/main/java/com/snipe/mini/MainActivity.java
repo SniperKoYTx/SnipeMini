@@ -154,13 +154,16 @@ public class MainActivity extends Activity {
     round(c,875,16,947,66,12,0xff293554);label(c,"II",911,51,25,WHITE);
    }
    if(state==MENU){
-    label(c,"SNIPE",480,145,76,CYAN);
-    label(c,"DODGE",480,207,67,WHITE);
-    label(c,"NEON SURVIVAL",480,246,19,0xff9baad4);
-    button(c,"PLAY",350,292,610,354,CYAN);
-    button(c,muted?"MUSIC OFF":"MUSIC ON",350,370,610,420,0xffd8e2ff);
-    label(c,"BEST SCORE  "+best,480,466,22,GOLD);
-    label(c,"MOVE WITH YOUR FINGER  •  COLLECT GOLD & SHIELDS",480,511,17,0xff9baad4);
+    label(c,"SNIPE DODGE",480,112,58,CYAN);
+    label(c,"NEON SURVIVAL  •  VERSION 3.0",480,148,18,0xff9baad4);
+    button(c,"PLAY",345,169,615,219,CYAN);
+    button(c,"MODES",205,238,470,286,0xffd8e2ff);
+    button(c,"SHOP",490,238,755,286,GOLD);
+    button(c,"MISSIONS",205,302,470,350,0xffd8e2ff);
+    button(c,"STATS",490,302,755,350,0xffd8e2ff);
+    button(c,"DAILY REWARD",345,368,615,416,GOLD);
+    label(c,"BEST "+best+"   COINS "+wallet+"   LEVEL "+level,480,458,21,WHITE);
+    label(c,muted?"SOUND OFF":"SOUND ON",830,514,20,CYAN);
     }else if(state==MENU+4){
     label(c,menuPage==1?"GAME MODES":menuPage==2?"SKIN SHOP":menuPage==3?"MISSIONS":"STATISTICS",480,100,43,WHITE);
     if(menuPage==1){label(c,"SELECT MODE",480,160,21,CYAN);button(c,"CLASSIC",310,185,650,235,mode==0?CYAN:0xffd8e2ff);button(c,"BOSS RUSH",310,250,650,300,mode==1?CYAN:0xffd8e2ff);button(c,"HARDCORE",310,315,650,365,mode==2?CYAN:0xffd8e2ff);}
@@ -180,7 +183,7 @@ public class MainActivity extends Activity {
   @Override public boolean onTouchEvent(MotionEvent e){
    int action=e.getActionMasked();float x=e.getX()*960/getWidth(),y=e.getY()*540/getHeight();
    if(action==MotionEvent.ACTION_DOWN){
-    if(state==MENU){if(y>275&&y<333&&x>345&&x<615){begin();}else if(y>345&&y<395){menuPage=x<480?1:2;state=MENU+4;}else if(y>405&&y<458){menuPage=x<480?3:4;state=MENU+4;}else if(y>495&&x>770){muted=!muted;prefs.edit().putBoolean("muted",muted).apply();if(audio!=null){try{if(muted)audio.pause();else audio.play();}catch(Exception ignored){}}}}
+    if(state==MENU){if(y>165&&y<224&&x>345&&x<615){begin();}else if(y>235&&y<290){menuPage=x<480?1:2;state=MENU+4;}else if(y>299&&y<355){menuPage=x<480?3:4;state=MENU+4;}else if(y>365&&y<423&&x>345&&x<615){int today=(int)(System.currentTimeMillis()/86400000L);if(today>dailyDay){dailyDay=today;wallet+=25;save();burst(480,380,GOLD,30);}}else if(y>485&&x>745){muted=!muted;prefs.edit().putBoolean("muted",muted).apply();if(audio!=null){try{if(muted)audio.pause();else audio.play();}catch(Exception ignored){}}}}
     else if(state==MENU+4){if(y>460){state=MENU;}else if(menuPage==1){if(y>180&&y<240)mode=0;else if(y>245&&y<305)mode=1;else if(y>310&&y<370)mode=2;}else if(menuPage==2&&y>200&&y<320){int idx=(int)((x-215)/106);if(idx>=0&&idx<6&&x>=215+idx*106&&x<=287+idx*106){if((unlocked&(1<<idx))!=0)skin=idx;else if(wallet>=50){wallet-=50;unlocked|=1<<idx;skin=idx;}save();}}else if(menuPage==3&&y>320&&y<390&&missionRewarded==0&&totalCoins>=20&&totalRuns>=5&&level>=5){wallet+=100;missionRewarded=1;save();}}\n    else if(state==PLAY){if(x>860&&y<80){state=PAUSE;dragging=false;}else{dragging=true;tx=x;}}
     else if(state==PAUSE||state==OVER){if(y>275&&y<340){if(state==OVER)begin();else{state=PLAY;last=System.nanoTime();}}else if(y>345&&y<410){state=MENU;}}
    }else if(action==MotionEvent.ACTION_MOVE&&state==PLAY&&dragging)tx=x;
