@@ -13,7 +13,8 @@ public class MainActivity extends Activity {
  public void onCreate(Bundle b){super.onCreate(b);setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);getWindow().getDecorView().setSystemUiVisibility(5894|1024|512);game=new Engine(this);setContentView(game);}
  protected void onPause(){super.onPause();game.pause();}
  protected void onResume(){super.onResume();if(game!=null)game.resume();}
- protected void onDestroy(){if(game!=null)game.shutdown();super.onDestroy();}\n public void onBackPressed(){game.back();}
+ protected void onDestroy(){if(game!=null)game.shutdown();super.onDestroy();}
+ public void onBackPressed(){game.back();}
  static class Engine extends View {
   static final int HOME=0,PLAY=1,PAUSE=2,DEAD=3,MODES=4,SHOP=5,QUEST=6,STATS=7,OPTIONS=8,TUTORIAL=9,CHEST=10;
   final Paint p=new Paint(3); final RectF rect=new RectF(); final Random rng=new Random(812); final SharedPreferences pref;
