@@ -27,7 +27,9 @@ jobs:
         run: |
           set -euxo pipefail
           echo "ANDROID_HOME=$ANDROID_HOME"
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-35" "build-tools;35.0.0" || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          test -f "$ANDROID_HOME/platforms/android-35/android.jar"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/aapt2"
           mkdir -p "$HOME/.android" "$HOME/.config/godot" "$HOME/.local/share/godot/keystores"
           keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           cp "$HOME/.android/debug.keystore" "$HOME/.local/share/godot/keystores/debug.keystore"
@@ -53,6 +55,12 @@ jobs:
           cat "$HOME/.config/godot/editor_settings-4.4.tres"
           test -f "$HOME/.local/share/godot/keystores/debug.keystore"
           test -f "$HOME/.android/debug.keystore"
+          echo "Installed Android SDK packages:"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --list_installed
+          echo "Installed Godot Android export template:"
+          ls -lh "$HOME/.local/share/godot/export_templates/4.4.1.stable/"
+          echo "Debug keystore:"
+          keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android
           godot --headless --verbose --path godot --export-debug "Android" build/UNBURIED-debug.apk
           test -s godot/build/UNBURIED-debug.apk
       - uses: actions/upload-artifact@v4
