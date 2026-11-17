@@ -10,7 +10,11 @@ var tool := 1
 var site := 1
 var excavated := 0
 var dragging := false
-var sand_mesh: MultiMeshInstance3D
+var sand_mesh: MeshInstance3D
+var last_dig_ms := 0
+var discovery_count := 0
+var started_at := 0
+var hud_panel: PanelContainer
 var camera: Camera3D
 var hud: CanvasLayer
 var title_label: Label
@@ -27,6 +31,7 @@ const SPOTS := [Vector2i(5, 7), Vector2i(18, 12), Vector2i(8, 22), Vector2i(16, 
 func _ready() -> void:
  depth.resize(TOTAL)
  _load_progress()
+ started_at = Time.get_ticks_msec()
  _setup_environment()
  _create_robot()
  _setup_sand()
@@ -54,7 +59,7 @@ func _setup_environment() -> void:
  var env := WorldEnvironment.new()
  var environment := Environment.new()
  environment.background_mode = Environment.BG_COLOR
- environment.background_color = Color("#8ab8c3")
+ environment.background_color = Color("#223b48")
  environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
  environment.ambient_light_color = Color("#ffe4b4")
  environment.ambient_light_energy = 0.9
@@ -65,12 +70,12 @@ func _setup_environment() -> void:
  light.light_energy = 1.4
  add_child(light)
  camera = Camera3D.new()
- camera.position = Vector3(0, 9.0, 8.4)
+ camera.position = Vector3(0, 8.3, 7.8)
  camera.fov = 55
  add_child(camera)
  camera.look_at(Vector3(0, -0.1, 0), Vector3.UP)
  camera.make_current()
- _cube(self, Vector3(0,-1.25,0), Vector3(8,0.5,9), Color("#74513a"))
+ _cube(self, Vector3(0,-1.5,0), Vector3(8,0.4,9), Color("#614735"))
  for i in range(10):
   var x := -3.8 if i % 2 == 0 else 3.8
   _cube(self, Vector3(x,-0.5,-3.7+i*0.8), Vector3(0.15,1.0,0.5), Color("#b78a53"))
@@ -91,36 +96,52 @@ func _create_robot() -> void:
   _cube(robot, Vector3(-0.8+i*0.26,-0.12,1.5),Vector3(0.12,0.1,0.12),Color("#d5b575"),0.4)
 
 func _setup_sand() -> void:
- sand_mesh = MultiMeshInstance3D.new()
- var cube := BoxMesh.new()
- cube.size = Vector3(SIZE*0.99, 0.28, SIZE*0.99)
- var material := StandardMaterial3D.new()
- material.vertex_color_use_as_albedo = true
- material.roughness = 1.0
- cube.material = material
- var mm := MultiMesh.new()
- mm.transform_format = MultiMesh.TRANSFORM_3D
- mm.use_colors = true
- mm.instance_count = TOTAL
- mm.mesh = cube
- sand_mesh.multimesh = mm
+ sand_mesh = MeshInstance3D.new()
+ sand_mesh.name = "ExcavationTerrain"
  add_child(sand_mesh)
  _update_sand()
 
+func _sand_height(x: int, y: int) -> float:
+ var xx := clampi(x,0,NX-1)
+ var yy := clampi(y,0,NY-1)
+ var d := float(depth[yy*NX+xx])
+ return -1.05 + d*0.48 + sin(float(xx)*0.48+float(site))*0.055 + cos(float(yy)*0.41)*0.055
+
 func _update_sand() -> void:
- var mm := sand_mesh.multimesh
+ var st := SurfaceTool.new()
+ st.begin(Mesh.PRIMITIVE_TRIANGLES)
+ var origin_x := -float(NX)*SIZE*0.5
+ var origin_z := -float(NY)*SIZE*0.5
  for y in range(NY):
   for x in range(NX):
-   var idx := y*NX+x
-   var d := int(depth[idx])
-   var px := (float(x)-float(NX-1)/2.0)*SIZE
-   var pz := (float(y)-float(NY-1)/2.0)*SIZE
-   var elevation := 0.42 - float(3-d)*0.16
-   if d == 0:
-    elevation = -2.5
-   mm.set_instance_transform(idx,Transform3D(Basis(),Vector3(px,elevation,pz)))
-   var shade := float((x*13+y*7+site*11)%17)/110.0
-   mm.set_instance_color(idx,Color(0.82+shade,0.58+shade,0.32+shade))
+   var px := origin_x+float(x)*SIZE
+   var pz := origin_z+float(y)*SIZE
+   var h00 := _sand_height(x,y)
+   var h10 := _sand_height(x+1,y)
+   var h01 := _sand_height(x,y+1)
+   var h11 := _sand_height(x+1,y+1)
+   var seed := float((x*37+y*17+site*11)%19)/19.0
+   var sand_color := Color("#c89a62").lerp(Color("#f3d393"),seed*0.58)
+   st.set_color(sand_color)
+   st.add_vertex(Vector3(px,h00,pz))
+   st.set_color(sand_color)
+   st.add_vertex(Vector3(px+SIZE,h10,pz))
+   st.set_color(sand_color)
+   st.add_vertex(Vector3(px,h01,pz+SIZE))
+   st.set_color(sand_color)
+   st.add_vertex(Vector3(px+SIZE,h10,pz))
+   st.set_color(sand_color)
+   st.add_vertex(Vector3(px+SIZE,h11,pz+SIZE))
+   st.set_color(sand_color)
+   st.add_vertex(Vector3(px,h01,pz+SIZE))
+ st.generate_normals()
+ var mesh := st.commit()
+ var mat := StandardMaterial3D.new()
+ mat.vertex_color_use_as_albedo = true
+ mat.roughness = 1.0
+ mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+ mesh.surface_set_material(0,mat)
+ sand_mesh.mesh = mesh
 
 func _setup_hud() -> void:
  hud = CanvasLayer.new()
@@ -188,13 +209,16 @@ func _dig_screen(pos: Vector2) -> void:
  var direction := camera.project_ray_normal(pos)
  if absf(direction.y) < 0.0001:
   return
- var distance := (0.45-origin.y)/direction.y
+ var distance := (0.15-origin.y)/direction.y
  if distance < 0:
   return
  var point := origin+direction*distance
  var cx := int(round(point.x/SIZE+float(NX-1)/2.0))
  var cy := int(round(point.z/SIZE+float(NY-1)/2.0))
- var radius := 1 if tool==1 else (2 if tool==2 else 3)
+ var radius := 1 if tool<3 else 2
+ if Time.get_ticks_msec()-last_dig_ms < 75:
+  return
+ last_dig_ms = Time.get_ticks_msec()
  var changed := false
  for y in range(maxi(0,cy-radius),mini(NY,cy+radius+1)):
   for x in range(maxi(0,cx-radius),mini(NX,cx+radius+1)):
@@ -206,7 +230,8 @@ func _dig_screen(pos: Vector2) -> void:
     changed = true
     if depth[idx]==0:
      excavated+=1
-     money+=1
+     if excavated%15==0:
+      money+=1
  if changed:
   _update_sand()
   _discover()
@@ -227,15 +252,19 @@ func _discover() -> void:
      count+=1
   if count>=int(total*0.8):
    found[i]=true
-   money+=REWARDS[i]
+   discovery_count+=1
+   money+=REWARDS[i] * site
    toast_label.text = NAMES[i]+"  +"+str(REWARDS[i])
    get_tree().create_timer(2.5).timeout.connect(func():toast_label.text="")
 
 func _buy_tool() -> void:
- var price := 70 if tool==1 else (220 if tool==2 else 550)
- if tool>=4:
+ var price := _tool_price()
+ if tool>=6:
   return
- if money<price:
+ if money<price or discovery_count < tool:
+  if discovery_count < tool:
+   toast_label.text = "FIND MORE ARTIFACTS FIRST"
+   return
   toast_label.text = "NEED "+str(price)+" COINS"
   return
  money-=price
@@ -245,11 +274,12 @@ func _buy_tool() -> void:
  _save_progress()
 
 func _next_site() -> void:
- if excavated<float(TOTAL)*0.68:
-  toast_label.text = "EXCAVATE 68% FIRST"
+ if excavated<float(TOTAL)*0.82 or not found.all(func(v): return v):
+  toast_label.text = "EXCAVATE 82% AND FIND ALL RELICS"
   return
  site+=1
  excavated=0
+ discovery_count=0
  found=[false,false,false,false]
  depth.fill(3)
  _update_sand()
@@ -258,15 +288,19 @@ func _next_site() -> void:
 
 func _refresh() -> void:
  status_label.text = "SITE "+str(site)+"  |  "+str(int(float(excavated)/TOTAL*100.0))+"%  |  "+str(money)+" COINS"
- var price := 70 if tool==1 else (220 if tool==2 else 550)
- buy_button.text = "MAX TOOL" if tool>=4 else "TOOL LV."+str(tool)+"  "+str(price)+" C"
- next_button.disabled = excavated<float(TOTAL)*0.68
+ var price := _tool_price()
+ buy_button.text = "MAX TOOL" if tool>=6 else "UPGRADE LV."+str(tool)+"  "+str(price)+" C"
+ buy_button.disabled = tool>=6 or money<price or discovery_count<tool
+ next_button.disabled = excavated<float(TOTAL)*0.82 or not found.all(func(v): return v)
+
+func _tool_price() -> int:
+ return int(250.0 * pow(2.6,float(tool-1)))
 
 func _save_progress() -> void:
  var file := FileAccess.open("user://unburied.save",FileAccess.WRITE)
  if file==null:
   return
- file.store_var({"money":money,"tool":tool,"site":site,"depth":depth,"found":found})
+ file.store_var({"money":money,"tool":tool,"site":site,"depth":depth,"found":found,"discovery_count":discovery_count})
 
 func _load_progress() -> void:
  depth.fill(3)
@@ -279,7 +313,8 @@ func _load_progress() -> void:
  if not data is Dictionary:
   return
  money=int(data.get("money",0))
- tool=clampi(int(data.get("tool",1)),1,4)
+ tool=clampi(int(data.get("tool",1)),1,6)
+ discovery_count=int(data.get("discovery_count",0))
  site=maxi(1,int(data.get("site",1)))
  var stored = data.get("depth",PackedByteArray())
  if stored is PackedByteArray and stored.size()==TOTAL:
@@ -287,6 +322,7 @@ func _load_progress() -> void:
  var flags = data.get("found",[false,false,false,false])
  if flags is Array and flags.size()==4:
   found=flags
+  discovery_count=maxi(discovery_count,found.count(true))
  for d in depth:
   if d==0:
    excavated+=1
