@@ -1,204 +1,110 @@
 package com.snipe.mini;
-
-import android.app.Activity;
-import android.os.Bundle;
-import android.content.Context;
-import android.content.SharedPreferences;
+import android.app.*;
+import android.os.*;
+import android.content.*;
 import android.content.pm.ActivityInfo;
-import android.graphics.Canvas;
-import android.graphics.Color;
-import android.graphics.Paint;
-import android.graphics.RectF;
-import android.view.MotionEvent;
-import android.view.View;
-import android.media.AudioFormat;
-import android.media.AudioManager;
-import android.media.AudioTrack;
-import java.util.ArrayList;
-import java.util.Random;
+import android.graphics.*;
+import android.view.*;
+import android.media.*;
+import java.util.*;
 
 public class MainActivity extends Activity {
- Game game;
- @Override public void onCreate(Bundle b) {
-  super.onCreate(b);setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
-  getWindow().getDecorView().setSystemUiVisibility(5894|1024|512);
-  game=new Game(this);setContentView(game);
- }
- @Override protected void onPause(){super.onPause();if(game!=null)game.suspend();}
- @Override protected void onResume(){super.onResume();if(game!=null)game.resumeAudio();}
- @Override protected void onDestroy(){if(game!=null)game.closeAudio();super.onDestroy();}
- @Override public void onBackPressed(){if(game!=null)game.back();else super.onBackPressed();}
-
- class Game extends View {
-  static final int MENU=0,PLAY=1,PAUSE=2,OVER=3;
-  final Paint p=new Paint(3);
-  final Random rnd=new Random();
-  final ArrayList<Obstacle> obstacles=new ArrayList<>();
-  final ArrayList<Particle> particles=new ArrayList<>();
-  final SharedPreferences prefs;
-  final RectF rect=new RectF();
-  final int WHITE=Color.WHITE, CYAN=0xff36f5df, PINK=0xffff4c83, GOLD=0xffffd66b;
-  int state=MENU, best, lives=3, coins=0, wallet=0, skin=0, unlocked=1, mode=0, level=1, totalRuns=0, totalCoins=0, kills=0, dailyDay=0, missionRewarded=0;
-  int menuPage=0, bossHp=0, bossMax=0, bossStage=0;
-  float magnet=0, slow=0, bossX=480, bossTime=0;
-  final int[] skins={0xff36f5df,0xffffd66b,0xffff4c83,0xffae8bff,0xff73ff85,0xffffffff};
-  boolean muted=false, dragging=false, audioRunning=true;
-  float px=480,tx=480,py=420,elapsed=0,spawn=0,score=0,shield=0,invuln=0,shake=0,background=0;
-  long last=System.nanoTime();
-  AudioTrack audio; Thread musicThread;
-  final float[] starsX=new float[64],starsY=new float[64],starsS=new float[64];
-  class Obstacle {float x,y,w,h,speed;int type;Obstacle(float xx,float yy,float ww,float hh,float sp,int t){x=xx;y=yy;w=ww;h=hh;speed=sp;type=t;}}
-  class Particle {float x,y,vx,vy,life;int color;Particle(float xx,float yy,float vxx,float vyy,int c){x=xx;y=yy;vx=vxx;vy=vyy;life=.55f;color=c;}}
-  Game(Context ctx){
-   super(ctx);setLayerType(View.LAYER_TYPE_HARDWARE,null);
-   prefs=ctx.getSharedPreferences("snipe_dodge_v2",0);best=prefs.getInt("best",0);wallet=prefs.getInt("wallet",0);skin=prefs.getInt("skin",0);unlocked=prefs.getInt("unlocked",1);level=prefs.getInt("level",1);totalRuns=prefs.getInt("runs",0);totalCoins=prefs.getInt("coins",0);dailyDay=prefs.getInt("daily",0);missionRewarded=prefs.getInt("mission",0);muted=prefs.getBoolean("muted",false);
-   for(int i=0;i<starsX.length;i++){starsX[i]=rnd.nextInt(960);starsY[i]=rnd.nextInt(540);starsS[i]=.3f+rnd.nextFloat()*1.6f;}
-   startAudio();setFocusable(true);
-  }
-  void fill(int color){p.setColor(color);p.setStyle(Paint.Style.FILL);p.setStrokeWidth(1);}
-  void round(Canvas c,float l,float t,float r,float b,float rad,int color){fill(color);rect.set(l,t,r,b);c.drawRoundRect(rect,rad,rad,p);}
-  void label(Canvas c,String s,float x,float y,int size,int color){fill(color);p.setTextAlign(Paint.Align.CENTER);p.setTypeface(android.graphics.Typeface.create("sans-serif",1));p.setTextSize(size);c.drawText(s,x,y,p);}
-  void button(Canvas c,String s,float l,float t,float r,float b,int color){round(c,l,t,r,b,14,color);label(c,s,(l+r)/2,(t+b)/2+8,23,0xff071326);}
-  void save(){prefs.edit().putInt("best",best).putInt("wallet",wallet).putInt("skin",skin).putInt("unlocked",unlocked).putInt("level",level).putInt("runs",totalRuns).putInt("coins",totalCoins).putInt("daily",dailyDay).putInt("mission",missionRewarded).apply();}
-  void begin(){obstacles.clear();particles.clear();px=480;tx=480;elapsed=0;spawn=.8f;score=0;shield=0;invuln=0;shake=0;lives=mode==2?1:3;coins=0;magnet=0;slow=0;bossHp=0;bossStage=0;totalRuns++;save();dragging=false;state=PLAY;last=System.nanoTime();}
-  void back(){if(state==PLAY)state=PAUSE;else if(state==PAUSE)state=PLAY;else state=MENU;invalidate();}
-  void suspend(){if(state==PLAY)state=PAUSE;audioRunning=false;if(audio!=null){try{audio.pause();}catch(Exception ignored){}}}
-  void resumeAudio(){audioRunning=true;last=System.nanoTime();if(audio!=null&&!muted){try{audio.play();}catch(Exception ignored){}}}
-  void closeAudio(){audioRunning=false;if(musicThread!=null)musicThread.interrupt();if(audio!=null){try{audio.pause();audio.flush();audio.release();}catch(Exception ignored){}audio=null;}}
-  void startAudio(){
-   try {
-    final int rate=22050;
-    int size=Math.max(4096,AudioTrack.getMinBufferSize(rate,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT));
-    audio=new AudioTrack(AudioManager.STREAM_MUSIC,rate,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT,size,AudioTrack.MODE_STREAM);
-    if(!muted)audio.play();
-    musicThread=new Thread(new Runnable(){public void run(){
-     short[] buf=new short[2048];long sample=0;
-     final double[] notes={110,146.83,164.81,130.81,110,146.83,196,164.81};
-     while(!Thread.currentThread().isInterrupted()){
-      if(!audioRunning||muted){try{Thread.sleep(90);}catch(InterruptedException e){break;}continue;}
-      for(int i=0;i<buf.length;i++,sample++){
-       double sec=(double)sample/rate, beat=sec*2.4, phase=beat%1;
-       int step=((int)beat/2)%notes.length;
-       double bass=notes[step];
-       double low=Math.sin(2*Math.PI*bass*sec)*.055;
-       double lead=Math.sin(2*Math.PI*bass*2*sec)*.018*(1-phase);
-       double kick=Math.sin(2*Math.PI*(65-40*phase)*sec)*Math.exp(-phase*17)*.035;
-       buf[i]=(short)(Math.max(-1,Math.min(1,low+lead+kick))*8500);
-      }
-      try{audio.write(buf,0,buf.length);}catch(Exception e){break;}
-     }
-    }},"SnipeMusic");musicThread.setDaemon(true);musicThread.start();
-   }catch(Exception ignored){muted=true;}
-  }
-  void burst(float x,float y,int color,int count){
-   for(int i=0;i<count&&particles.size()<110;i++){
-    float a=rnd.nextFloat()*6.283f,s=45+rnd.nextFloat()*180;
-    particles.add(new Particle(x,y,(float)Math.cos(a)*s,(float)Math.sin(a)*s,color));
+ Engine game;
+ public void onCreate(Bundle b){super.onCreate(b);setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);getWindow().getDecorView().setSystemUiVisibility(5894|1024|512);game=new Engine(this);setContentView(game);}
+ protected void onPause(){super.onPause();game.pause();}
+ protected void onResume(){super.onResume();if(game!=null)game.resume();}
+ public void onBackPressed(){game.back();}
+ static class Engine extends View {
+  static final int HOME=0,PLAY=1,PAUSE=2,DEAD=3,MODES=4,SHOP=5,QUEST=6,STATS=7,OPTIONS=8,TUTORIAL=9,CHEST=10;
+  final Paint p=new Paint(3); final RectF rect=new RectF(); final Random rng=new Random(812); final SharedPreferences pref;
+  final ArrayList<Obj> objects=new ArrayList<>(); final ArrayList<Particle> particles=new ArrayList<>();
+  final int[] palette={0xff28ead7,0xffffcc54,0xffff578e,0xff9b79ff,0xff77f48e,0xfff5f5fa,0xffed733d,0xff4b9eff,0xfff2b3ee,0xffb6f65e,0xff777777,0xffe9bc65};
+  final String[] skinNames={"SNIPE BOT","SOLAR","PULSE","GHOST","LIME","SNOW","EMBER","OCEAN","BUBBLE","TOXIC","STEEL","LEGEND"};
+  final String[] worlds={"NEON CITY","DEEP SPACE","LAVA CORE","FROZEN GRID"};
+  final int[] backgrounds={0xff080f28,0xff090b1d,0xff26100d,0xff092b3e};
+  final int[] accents={0xff28ead7,0xffac85ff,0xffff8051,0xff89eaff};
+  int state=HOME,mode=0,world=0,skin=0,unlocked=1,coins=0,best=0,runs=0,totalCoins=0,level=1,achievements=0;
+  int dailyStamp=0,weekStamp=0,dayCoins=0,weekRuns=0,dayRuns=0,claims=0,quality=1,fps=60,control=0, music=0,effects=1;
+  int lives=3,combo=0,maxCombo=0,near=0,bossHp=0,bossMax=0,bossNumber=0,shots=0;
+  float x=480,target=480,y=425,score=0,elapsed=0,spawn=.7f,invincible=0,shield=0,magnet=0,slow=0,dash=0,dashCooldown=0,shake=0,clock=0,bossTimer=0;
+  boolean touched=false,seenTutorial=false;
+  long last=System.nanoTime(),nextFrame=0; SoundPool sounds; int soundCoin,soundHit,soundPower;
+  static class Obj{float x,y,w,h,speed;int kind;boolean grazed;Obj(float x,float y,float w,float h,float speed,int kind){this.x=x;this.y=y;this.w=w;this.h=h;this.speed=speed;this.kind=kind;}}
+  static class Particle{float x,y,vx,vy,t;int c;Particle(float x,float y,float vx,float vy,int c){this.x=x;this.y=y;this.vx=vx;this.vy=vy;this.c=c;this.t=.5f;}}
+  Engine(Context c){super(c);pref=c.getSharedPreferences("snipe_dodge_v2",0);load();setLayerType(View.LAYER_TYPE_HARDWARE,null);initSounds();}
+  int get(String k,int d){return pref.getInt(k,d);}
+  void load(){coins=get("wallet",0);best=get("best",0);runs=get("runs",0);totalCoins=get("coins",0);level=get("level",1);skin=Math.min(11,get("skin",0));unlocked=get("unlocked",1);mode=get("mode",0);world=get("world",0);achievements=get("achievements",0);dailyStamp=get("daily",0);weekStamp=get("week",0);dayCoins=get("dayCoins",0);weekRuns=get("weekRuns",0);dayRuns=get("dayRuns",0);claims=get("claims",0);fps=get("fps",60);quality=get("quality",1);control=get("control",0);music=get("music",0);effects=get("effects",1);seenTutorial=get("tutorial",0)==1;rollover();}
+  void save(){pref.edit().putInt("wallet",coins).putInt("best",best).putInt("runs",runs).putInt("coins",totalCoins).putInt("level",level).putInt("skin",skin).putInt("unlocked",unlocked).putInt("mode",mode).putInt("world",world).putInt("achievements",achievements).putInt("daily",dailyStamp).putInt("week",weekStamp).putInt("dayCoins",dayCoins).putInt("weekRuns",weekRuns).putInt("dayRuns",dayRuns).putInt("claims",claims).putInt("fps",fps).putInt("quality",quality).putInt("control",control).putInt("music",music).putInt("effects",effects).putInt("tutorial",seenTutorial?1:0).apply();}
+  void rollover(){Calendar c=Calendar.getInstance();int day=c.get(Calendar.YEAR)*400+c.get(Calendar.DAY_OF_YEAR);int week=c.get(Calendar.YEAR)*60+c.get(Calendar.WEEK_OF_YEAR);if(day!=dailyStamp){dailyStamp=day;dayCoins=0;dayRuns=0;claims&=~3;}if(week!=weekStamp){weekStamp=week;weekRuns=0;claims&=~4;}save();}
+  void initSounds(){try{sounds=new SoundPool(3,AudioManager.STREAM_MUSIC,0);soundCoin=tone(660);soundHit=tone(180);soundPower=tone(880);}catch(Exception e){sounds=null;}}
+  int tone(int hz){int sr=11025,n=sr/10;byte[] pcm=new byte[n*2];for(int i=0;i<n;i++){double fade=Math.pow(1-i/(double)n,2);short v=(short)(Math.sin(2*Math.PI*hz*i/sr)*fade*7000);pcm[2*i]=(byte)v;pcm[2*i+1]=(byte)(v>>8);}try{java.io.File f=java.io.File.createTempFile("sfx",".wav",getContext().getCacheDir());java.io.FileOutputStream out=new java.io.FileOutputStream(f);java.nio.ByteBuffer b=java.nio.ByteBuffer.allocate(44).order(java.nio.ByteOrder.LITTLE_ENDIAN);b.put("RIFF".getBytes());b.putInt(36+pcm.length);b.put("WAVEfmt ".getBytes());b.putInt(16);b.putShort((short)1);b.putShort((short)1);b.putInt(sr);b.putInt(sr*2);b.putShort((short)2);b.putShort((short)16);b.put("data".getBytes());b.putInt(pcm.length);out.write(b.array());out.write(pcm);out.close();int id=sounds.load(f.getAbsolutePath(),1);f.deleteOnExit();return id;}catch(Exception e){return 0;}}
+  void sfx(int id){if(effects==1&&sounds!=null&&id!=0)sounds.play(id,.16f,.16f,0,0,1);}
+  void pause(){if(state==PLAY)state=PAUSE;last=System.nanoTime();}
+  void resume(){last=System.nanoTime();}
+  void back(){if(state==PLAY)state=PAUSE;else if(state==PAUSE)state=PLAY;else state=HOME;last=System.nanoTime();invalidate();}
+  void start(){rollover();objects.clear();particles.clear();score=elapsed=0;spawn=.8f;invincible=shield=magnet=slow=dash=dashCooldown=0;bossHp=0;bossNumber=0;bossTimer=0;shots=0;combo=near=0;lives=mode==2?1:3;x=target=480;runs++;dayRuns++;weekRuns++;save();state=seenTutorial?PLAY:TUTORIAL;last=System.nanoTime();}
+  void end(){state=DEAD;best=Math.max(best,(int)score);level=Math.max(level,1+(int)(Math.sqrt(best/100.0)));updateAchievements();save();}
+  void updateAchievements(){int[] milestones={1,5,10,25,50,100,200,500,1000,2000,5,10,20,50,100,1,3,5,10,20};for(int i=0;i<20;i++){int v=i<10?totalCoins:i<15?runs:i<18?level:maxCombo;if(v>=milestones[i])achievements|=1<<i;}}
+  void burst(float xx,float yy,int color,int count){if(quality==0)return;for(int i=0;i<count&&particles.size()<75;i++){double a=rng.nextDouble()*6.283;float speed=45+rng.nextFloat()*155;particles.add(new Particle(xx,yy,(float)Math.cos(a)*speed,(float)Math.sin(a)*speed,color));}}
+  void spawn(){int roll=rng.nextInt(100);int type=roll<16?1:roll<23?2:roll<29?3:roll<35?4:0;float w=type==0?38+rng.nextInt(55):32;float xx=28+rng.nextInt((int)(900-w));objects.add(new Obj(xx,-65,w,type==0?38:32,175+Math.min(240,elapsed*3.3f)+rng.nextInt(55),type));}
+  void boss(){if(mode!=1)return;int stage=1+(int)(elapsed/35);if(stage>bossNumber){bossNumber=stage;bossHp=7+stage*3;bossMax=bossHp;bossTimer=0;}if(bossHp<=0)return;bossTimer+=1f/60;float bx=480+(float)Math.sin(elapsed*1.7)*250;if(bossTimer>.8f){bossTimer=0;int attack=bossNumber%3;for(int i=0;i<(attack==2?3:1);i++){float ox=attack==0?x:bx+(i-1)*95;objects.add(new Obj(Math.max(30,Math.min(910,ox)),85,attack==1?85:32,25,240+bossNumber*15,0));}}}
+  void tick(float dt){clock+=dt;for(int i=particles.size()-1;i>=0;i--){Particle a=particles.get(i);a.x+=a.vx*dt;a.y+=a.vy*dt;a.t-=dt;if(a.t<=0)particles.remove(i);}if(state!=PLAY)return;
+   elapsed+=dt;score+=dt*(mode==2?18:12)*(1+Math.min(combo,20)*.02f);shield=Math.max(0,shield-dt);magnet=Math.max(0,magnet-dt);slow=Math.max(0,slow-dt);invincible=Math.max(0,invincible-dt);dash=Math.max(0,dash-dt);dashCooldown=Math.max(0,dashCooldown-dt);shake=Math.max(0,shake-dt*3);
+   x+=(target-x)*Math.min(1,dt*(dash>0?35:16));x=Math.max(25,Math.min(935,x));
+   spawn-=dt;if(spawn<=0&&objects.size()<38){spawn();spawn=Math.max(.25f,(mode==2?.54f:.82f)-elapsed*.006f);}
+   if(mode==1){bossTimer+=dt;int stage=1+(int)(elapsed/40);if(stage>bossNumber){bossNumber=stage;bossHp=8+stage*2;bossMax=bossHp;}if(bossTimer>1.3f){bossTimer=0;float bx=480+(float)Math.sin(elapsed*1.8f)*280;int pattern=bossNumber%3;for(int j=0;j<(pattern==2?3:1);j++)objects.add(new Obj(Math.max(25,Math.min(920,pattern==0?x:bx+j*85-85)),-40,pattern==1?75:35,32,265+stage*10,0));}}
+   for(int i=objects.size()-1;i>=0;i--){Obj o=objects.get(i);o.y+=o.speed*dt*(slow>0?.5f:1f);if(o.kind==1&&magnet>0&&Math.abs(x-o.x)<190)o.x+=(x-o.x)*dt*4;
+    float dx=Math.abs(x-(o.x+o.w/2)),dy=Math.abs(y-(o.y+o.h/2));boolean hit=dx<o.w/2+18&&dy<o.h/2+18;
+    if(o.kind==0&&!o.grazed&&dy<o.h/2+42&&dx<o.w/2+35&&!hit){o.grazed=true;near++;combo++;maxCombo=Math.max(maxCombo,combo);score+=5;}
+    if(hit){objects.remove(i);if(o.kind==1){coins++;totalCoins++;dayCoins++;score+=25;sfx(soundCoin);burst(x,y,0xffffd66b,10);}
+     else if(o.kind==2){shield=7;sfx(soundPower);burst(x,y,0xff28ead7,12);}
+     else if(o.kind==3){magnet=7;sfx(soundPower);}
+     else if(o.kind==4){slow=6;sfx(soundPower);}
+     else if(shield>0||dash>0){shield=0;burst(x,y,0xff28ead7,12);}
+     else if(invincible==0){lives--;combo=0;invincible=1.3f;shake=.8f;sfx(soundHit);burst(x,y,0xffff578e,20);if(lives<=0){end();break;}}}
+    else if(o.y>570)objects.remove(i);
    }
+   if(mode==1&&bossHp>0&&elapsed>10&&rng.nextFloat()<dt*.3f){bossHp--;score+=20;if(bossHp==0){coins+=30;score+=200;burst(480,100,0xffffd66b,35);}}
+   if(quality>0&&rng.nextFloat()<dt*8)burst(x,y+24,palette[skin],1);
+   if(((int)elapsed)%15==0&&rng.nextFloat()<dt*.4f)save();
   }
-  void addObstacle(){
-   int roll=rnd.nextInt(100);int type=roll<11?2:roll<30?1:roll<35?3:roll<40?4:0;
-   float w=type==0?38+rnd.nextInt(62):type==1?30:34;
-   float x=35+rnd.nextInt(880-(int)w);
-   obstacles.add(new Obstacle(x,-50,w,type==0?36+rnd.nextInt(30):34,185+elapsed*4+rnd.nextInt(65),type));
-  }
-  void update(float dt){
-   background+=dt;shake=Math.max(0,shake-dt*3);
-   for(int i=particles.size()-1;i>=0;i--){Particle a=particles.get(i);a.x+=a.vx*dt;a.y+=a.vy*dt;a.life-=dt;if(a.life<=0)particles.remove(i);}
-   if(state!=PLAY)return;
-   elapsed+=dt;score+=dt*(mode==2?19:12);shield=Math.max(0,shield-dt);magnet=Math.max(0,magnet-dt);slow=Math.max(0,slow-dt);invuln=Math.max(0,invuln-dt);
-   px+=(tx-px)*Math.min(1,dt*17);
-   px=Math.max(28,Math.min(932,px));
-   spawn-=dt;
-   if(spawn<=0&&obstacles.size()<35){addObstacle();spawn=Math.max(.19f,(mode==2?.55f:mode==1?.64f:.8f)-elapsed*.008f);}
-   for(int i=obstacles.size()-1;i>=0;i--){
-    Obstacle b=obstacles.get(i);b.y+=b.speed*dt*(slow>0?.48f:1f);if(magnet>0&&b.type==1&&Math.abs(px-b.x)<180){b.x+=(px-b.x)*dt*3;}
-    if(b.y>590){obstacles.remove(i);continue;}
-    if(Math.abs((b.x+b.w/2)-px)<b.w/2+22&&Math.abs((b.y+b.h/2)-py)<b.h/2+21){
-     obstacles.remove(i);
-     if(b.type==1){coins++;wallet++;totalCoins++;score+=45;save();burst(px,py,GOLD,13);}
-     else if(b.type==2){shield=5;burst(px,py,CYAN,14);}
-     else if(b.type==3){magnet=7;burst(px,py,GOLD,14);}
-     else if(b.type==4){slow=6;burst(px,py,0xffae8bff,14);}
-     else if(shield>0){shield=0;burst(px,py,CYAN,18);}
-     else if(invuln<=0){lives--;invuln=1.2f;shake=1;burst(px,py,PINK,25);if(lives<=0){state=OVER;int s=(int)score;if(s>best)best=s;level=Math.max(level,1+(int)(score/250));save();}}
-    }
+  void color(int c){p.setColor(c);p.setStyle(Paint.Style.FILL);}
+  void box(Canvas c,float l,float t,float r,float b,int col){color(col);rect.set(l,t,r,b);c.drawRoundRect(rect,12,12,p);}
+  void txt(Canvas c,String s,float x,float y,int size,int col){color(col);p.setTypeface(Typeface.create("sans-serif",Typeface.BOLD));p.setTextAlign(Paint.Align.CENTER);p.setTextSize(size);c.drawText(s,x,y,p);}
+  void btn(Canvas c,String s,float x,float y,float w,int col){box(c,x,y,x+w,y+49,col);txt(c,s,x+w/2,y+32,20,0xff071322);}
+  void bot(Canvas c,float xx,float yy,int col,int size){float z=size/46f;c.save();c.translate(xx,yy);c.scale(z,z);box(c,-23,-22,23,22,col);box(c,-16,-11,-5,-2,0xff071322);box(c,5,-11,16,-2,0xff071322);box(c,-9,8,9,11,0xff071322);color(col);c.drawCircle(-19,24,6,p);c.drawCircle(19,24,6,p);c.restore();}
+  void scenery(Canvas c){int bg=backgrounds[world];c.drawColor(bg);int accent=accents[world];color((accent&0x00ffffff)|0x33000000);for(int layer=0;layer<3;layer++){float speed=quality==0?0:clock*(layer+1)*7;for(int i=0;i<16;i++){float xx=(i*87+layer*33)%1020-30;float yy=(i*107+layer*53+(int)speed)%600-30;c.drawCircle(xx,yy,layer+1.5f,p);}}if(quality>0){color((accent&0x00ffffff)|0x19000000);for(int i=0;i<13;i++){float xx=i*80; c.drawLine(xx,0,xx,540,p);}for(int i=0;i<8;i++)c.drawLine(0,i*80,960,i*80,p);}}
+  void header(Canvas c,String title){txt(c,title,480,85,43,0xffffffff);btn(c,"BACK",36,455,165,0xffd8e3f4);}
+  protected void onDraw(Canvas raw){super.onDraw(raw);long now=System.nanoTime();float dt=Math.min(.04f,Math.max(0,(now-last)/1e9f));last=now;tick(dt);Canvas c=raw;c.save();c.scale(getWidth()/960f,getHeight()/540f);scenery(c);
+   if(state==PLAY||state==PAUSE||state==DEAD){for(Obj o:objects){int col=o.kind==0?0xffff578e:o.kind==1?0xffffd66b:o.kind==2?0xff28ead7:o.kind==3?0xff83f48e:0xffa88bff;box(c,o.x,o.y,o.x+o.w,o.y+o.h,col);if(o.kind>0)txt(c,o.kind==1?"+":o.kind==2?"S":o.kind==3?"M":"T",o.x+o.w/2,o.y+24,20,0xff081222);}for(Particle a:particles){color(a.c);c.drawCircle(a.x,a.y,Math.max(1,a.t*6),p);}if(shield>0){color(0x5536f5df);c.drawCircle(x,y,39,p);}if(invincible==0||((int)(invincible*10))%2==0)bot(c,x,y,palette[skin],46);
+    txt(c,"SCORE "+(int)score,120,43,22,0xffffffff);txt(c,"COMBO x"+combo,460,43,20,0xffffd66b);txt(c,"HP "+lives+"  COINS "+coins,743,43,19,0xffffffff);btn(c,"II",872,13,75,0xffd8e3f4);
+    if(mode==1&&bossHp>0){box(c,340,70,620,82,0xff353653);box(c,340,70,340+280f*bossHp/bossMax,82,0xffff578e);txt(c,"BOSS "+(bossNumber%3+1),480,107,16,0xffffffff);}
+    if(state==PLAY){txt(c,"DASH "+(dashCooldown==0?"READY":(int)Math.ceil(dashCooldown)+"s"),860,514,18,0xff28ead7);txt(c,worlds[world],165,514,16,0xffb5c4dd);}
    }
-   if(rnd.nextFloat()<dt*12)burst(px,py+23,skins[skin],1);
-   if(mode==1){int stage=1+(int)(elapsed/40);if(stage>bossStage){bossStage=stage;bossHp=5+stage*2;bossMax=bossHp;}if(bossHp>0){bossTime+=dt;bossX=480+(float)Math.sin(bossTime*1.4)*290;if(bossTime>1.6f){bossTime=0;obstacles.add(new Obstacle(bossX,-20,70,28,270+stage*12,0));}if(Math.abs(px-bossX)<75&&rnd.nextFloat()<dt*.5f){bossHp--;score+=20;burst(bossX,100,PINK,5);}}}
-   level=Math.max(level,1+(int)(score/250));
+   if(state==HOME){bot(c,480,130,palette[skin],80);txt(c,"SNIPE DODGE 4.0",480,230,47,0xffffffff);txt(c,"SNIPE BOT  •  "+worlds[world],480,260,18,accents[world]);btn(c,"PLAY",346,282,268,0xff28ead7);btn(c,"MODES",160,348,202,0xffd8e3f4);btn(c,"SKINS",379,348,202,0xffffd66b);btn(c,"MISSIONS",598,348,202,0xffd8e3f4);btn(c,"STATS",160,411,202,0xffd8e3f4);btn(c,"CHEST",379,411,202,0xffffd66b);btn(c,"SETTINGS",598,411,202,0xffd8e3f4);txt(c,"COINS "+coins+"  •  BEST "+best+"  •  LEVEL "+level,480,510,19,0xffffffff);}
+   if(state==MODES){header(c,"CHOOSE MODE / WORLD");String[] names={"CLASSIC","BOSS RUSH","HARDCORE"};for(int i=0;i<3;i++)btn(c,names[i],150+i*224,145,205,i==mode?0xff28ead7:0xffd8e3f4);for(int i=0;i<4;i++)btn(c,worlds[i]+(level<i*3+1?" LOCKED":""),55+i*224,270,210,i==world?accents[i]:0xffd8e3f4);txt(c,"UNLOCK WORLDS AT LEVEL 1, 4, 7, 10",480,391,19,0xffffffff);}
+   if(state==SHOP){header(c,"SNIPE BOT SKINS");txt(c,"COINS "+coins+"  •  SELECT A BOT",480,132,22,0xffffd66b);for(int i=0;i<12;i++){int col=i%6,row=i/6;float xx=145+col*135,yy=205+row*130;bot(c,xx,yy,palette[i],45);txt(c,skinNames[i],xx,yy+45,13,0xffffffff);txt(c,(unlocked&(1<<i))!=0?(skin==i?"EQUIPPED":"OWNED"):(80+i*40)+" C",xx,yy+64,14,0xffffd66b);}}
+   if(state==QUEST){header(c,"QUESTS & ACHIEVEMENTS");txt(c,"DAILY: COLLECT 15 COINS "+dayCoins+"/15",480,152,23,0xffffffff);txt(c,"WEEKLY: PLAY 10 RUNS "+weekRuns+"/10",480,208,23,0xffffffff);txt(c,"DAILY: PLAY 3 RUNS "+dayRuns+"/3",480,264,23,0xffffffff);int count=Integer.bitCount(achievements);txt(c,"ACHIEVEMENTS "+count+"/20",480,325,25,0xffffd66b);btn(c,"CLAIM COMPLETED QUESTS",290,364,380,0xff28ead7);}
+   if(state==STATS){header(c,"PLAYER STATISTICS");txt(c,"BEST SCORE "+best,480,164,27,0xffffffff);txt(c,"RUNS "+runs+"  •  COINS "+totalCoins,480,230,24,0xffffffff);txt(c,"LEVEL "+level+"  •  ACHIEVEMENTS "+Integer.bitCount(achievements)+"/20",480,296,23,0xffffd66b);txt(c,"MAX COMBO THIS RUN "+maxCombo,480,355,21,0xff28ead7);}
+   if(state==OPTIONS){header(c,"SETTINGS");btn(c,"FPS "+fps,170,151,280,0xffd8e3f4);btn(c,"GRAPHICS "+(quality==1?"BALANCED":"LOW"),510,151,280,0xffd8e3f4);btn(c,"MUSIC "+(music==1?"ON":"OFF"),170,233,280,0xffd8e3f4);btn(c,"SFX "+(effects==1?"ON":"OFF"),510,233,280,0xffd8e3f4);btn(c,"CONTROL "+(control==0?"DRAG":"TAP"),315,315,330,0xff28ead7);}
+   if(state==CHEST){header(c,"COSMETIC CHEST");txt(c,"100 COINS = ONE RANDOM LOCKED SKIN",480,202,24,0xffffffff);txt(c,"YOUR COINS "+coins,480,264,23,0xffffd66b);btn(c,"OPEN CHEST",320,312,320,0xff28ead7);}
+   if(state==TUTORIAL){box(c,225,122,735,415,0xee101b37);txt(c,"HOW TO PLAY",480,178,37,0xffffffff);txt(c,"DRAG YOUR BOT LEFT AND RIGHT",480,225,21,0xffffffff);txt(c,"AVOID RED • COLLECT GOLD",480,266,21,0xffffd66b);txt(c,"DOUBLE TAP TO DASH",480,307,21,0xff28ead7);btn(c,"LET'S PLAY",335,342,290,0xff28ead7);}
+   if(state==PAUSE||state==DEAD){box(c,245,120,715,426,0xee101b37);txt(c,state==DEAD?"GAME OVER":"PAUSED",480,193,43,0xffffffff);txt(c,"SCORE "+(int)score+"  BEST "+best,480,253,23,0xffffd66b);btn(c,state==DEAD?"RETRY":"RESUME",325,281,310,0xff28ead7);btn(c,"MAIN MENU",325,354,310,0xffd8e3f4);}
+   c.restore();postInvalidateDelayed(fps==30?33:16);
   }
-  @Override protected void onDraw(Canvas raw){
-   super.onDraw(raw);
-   float sx=getWidth()/960f,sy=getHeight()/540f;
-   long now=System.nanoTime();float dt=Math.min(.035f,Math.max(0,(now-last)/1000000000f));last=now;
-   update(dt);
-   Canvas c=raw;c.save();c.scale(sx,sy);
-   c.drawColor(0xff080d21);
-   fill(0xff1a2346);p.setStrokeWidth(1);
-   for(int i=0;i<13;i++)c.drawLine(i*80,0,i*80,540,p);
-   for(int i=0;i<8;i++)c.drawLine(0,i*80,960,i*80,p);
-   for(int i=0;i<starsX.length;i++){fill(0xff35476b);c.drawCircle(starsX[i],(starsY[i]+background*starsS[i]*12)%540,starsS[i],p);}
-   c.save();if(shake>0)c.translate((rnd.nextFloat()-.5f)*shake*10,(rnd.nextFloat()-.5f)*shake*10);
-   for(Obstacle b:obstacles){
-    int color=b.type==1?GOLD:b.type==2?CYAN:b.type==3?0xff77ff88:b.type==4?0xffae8bff:PINK;
-    round(c,b.x,b.y,b.x+b.w,b.y+b.h,8,color);
-    if(b.type!=0){label(c,b.type==1?"+":b.type==2?"S":b.type==3?"M":"T",b.x+b.w/2,b.y+b.h/2+8,22,0xff071326);}
-   }
-   for(Particle a:particles){fill(a.color);c.drawCircle(a.x,a.y,Math.max(1,a.life*5),p);}
-   if(state!=MENU){
-    if(shield>0){fill(0x6636f5df);c.drawCircle(px,py,39,p);}
-    if(invuln<=0||((int)(invuln*12)%2==0)){
-     round(c,px-23,py-23,px+23,py+23,11,skins[skin]);
-     fill(0xff071326);c.drawCircle(px-8,py-5,4,p);c.drawCircle(px+8,py-5,4,p);
-     round(c,px-9,py+7,px+9,py+10,2,0xff071326);
-    }
-   }
-   c.restore();
-   if(state==PLAY||state==PAUSE){
-    label(c,"SCORE "+(int)score,130,48,24,WHITE);
-    label(c,"BEST "+best,465,48,20,0xff9aaed1);
-    label(c,"HP "+lives+"   COINS "+coins+"   LV "+level,745,48,19,GOLD);
-    if(mode==1&&bossHp>0){round(c,345,68,615,78,4,0xff35415e);round(c,345,68,345+270f*bossHp/bossMax,78,4,PINK);}
-    round(c,875,16,947,66,12,0xff293554);label(c,"II",911,51,25,WHITE);
-   }
-   if(state==MENU){
-    label(c,"SNIPE DODGE",480,112,58,CYAN);
-    label(c,"NEON SURVIVAL  •  VERSION 3.0",480,148,18,0xff9baad4);
-    button(c,"PLAY",345,169,615,219,CYAN);
-    button(c,"MODES",205,238,470,286,0xffd8e2ff);
-    button(c,"SHOP",490,238,755,286,GOLD);
-    button(c,"MISSIONS",205,302,470,350,0xffd8e2ff);
-    button(c,"STATS",490,302,755,350,0xffd8e2ff);
-    button(c,"DAILY REWARD",345,368,615,416,GOLD);
-    label(c,"BEST "+best+"   COINS "+wallet+"   LEVEL "+level,480,458,21,WHITE);
-    label(c,muted?"SOUND OFF":"SOUND ON",830,514,20,CYAN);
-    }else if(state==MENU+4){
-    label(c,menuPage==1?"GAME MODES":menuPage==2?"SKIN SHOP":menuPage==3?"MISSIONS":"STATISTICS",480,100,43,WHITE);
-    if(menuPage==1){label(c,"SELECT MODE",480,160,21,CYAN);button(c,"CLASSIC",310,185,650,235,mode==0?CYAN:0xffd8e2ff);button(c,"BOSS RUSH",310,250,650,300,mode==1?CYAN:0xffd8e2ff);button(c,"HARDCORE",310,315,650,365,mode==2?CYAN:0xffd8e2ff);}
-    if(menuPage==2){label(c,"WALLET: "+wallet+"   •   SKIN: "+(skin+1)+"/6",480,163,24,GOLD);for(int i=0;i<6;i++){float x=215+i*106;round(c,x,205,x+72,277,14,skins[i]);label(c,(unlocked&(1<<i))!=0?"OWNED":"50",x+36,309,17,WHITE);}label(c,"TAP A SKIN TO EQUIP OR BUY",480,355,18,CYAN);}
-    if(menuPage==3){label(c,"COLLECT 20 COINS  •  "+totalCoins+"/20",480,180,23,GOLD);label(c,"PLAY 5 RUNS  •  "+totalRuns+"/5",480,228,23,CYAN);label(c,"REACH LEVEL 5  •  "+level+"/5",480,276,23,WHITE);button(c,"CLAIM MISSION REWARD",300,325,660,385,GOLD);label(c,"ONE-TIME REWARD: 100 COINS",480,416,18,WHITE);}
-    if(menuPage==4){label(c,"BEST SCORE: "+best,480,165,28,GOLD);label(c,"TOTAL RUNS: "+totalRuns,480,220,25,WHITE);label(c,"COINS COLLECTED: "+totalCoins,480,275,25,CYAN);label(c,"LEVEL: "+level,480,330,25,WHITE);}
-    button(c,"BACK",375,465,585,515,CYAN);
-   }else if(state==PAUSE||state==OVER){
-    round(c,265,130,695,425,24,0xee121a35);
-    label(c,state==OVER?"GAME OVER":"PAUSED",480,203,46,WHITE);
-    label(c,state==OVER?"SCORE  "+(int)score+"  •  BEST  "+best:"TAKE A BREAK",480,253,22,GOLD);
-    button(c,state==OVER?"RETRY":"RESUME",332,278,628,333,CYAN);
-    button(c,"MAIN MENU",332,350,628,401,0xffd8e2ff);
-   }else if(state==PLAY){label(c,"DRAG LEFT OR RIGHT TO DODGE",480,519,17,0xff9baad4);}
-   c.restore();postInvalidateDelayed(16);
-  }
-  @Override public boolean onTouchEvent(MotionEvent e){
-   int action=e.getActionMasked();float x=e.getX()*960/getWidth(),y=e.getY()*540/getHeight();
-   if(action==MotionEvent.ACTION_DOWN){
-    if(state==MENU){if(y>165&&y<224&&x>345&&x<615){begin();}else if(y>235&&y<290){menuPage=x<480?1:2;state=MENU+4;}else if(y>299&&y<355){menuPage=x<480?3:4;state=MENU+4;}else if(y>365&&y<423&&x>345&&x<615){int today=(int)(System.currentTimeMillis()/86400000L);if(today>dailyDay){dailyDay=today;wallet+=25;save();burst(480,380,GOLD,30);}}else if(y>485&&x>745){muted=!muted;prefs.edit().putBoolean("muted",muted).apply();if(audio!=null){try{if(muted)audio.pause();else audio.play();}catch(Exception ignored){}}}}
-    else if(state==MENU+4){if(y>460){state=MENU;}else if(menuPage==1){if(y>180&&y<240)mode=0;else if(y>245&&y<305)mode=1;else if(y>310&&y<370)mode=2;}else if(menuPage==2&&y>200&&y<320){int idx=(int)((x-215)/106);if(idx>=0&&idx<6&&x>=215+idx*106&&x<=287+idx*106){if((unlocked&(1<<idx))!=0)skin=idx;else if(wallet>=50){wallet-=50;unlocked|=1<<idx;skin=idx;}save();}}else if(menuPage==3&&y>320&&y<390&&missionRewarded==0&&totalCoins>=20&&totalRuns>=5&&level>=5){wallet+=100;missionRewarded=1;save();}}
-    else if(state==PLAY){if(x>860&&y<80){state=PAUSE;dragging=false;}else{dragging=true;tx=x;}}
-    else if(state==PAUSE||state==OVER){if(y>275&&y<340){if(state==OVER)begin();else{state=PLAY;last=System.nanoTime();}}else if(y>345&&y<410){state=MENU;}}
-   }else if(action==MotionEvent.ACTION_MOVE&&state==PLAY&&dragging)tx=x;
-   else if(action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_CANCEL)dragging=false;
-   invalidate();return true;
-  }
+  long tap=0;
+  public boolean onTouchEvent(MotionEvent e){if(getWidth()==0||getHeight()==0)return true;float xx=e.getX()*960/getWidth(),yy=e.getY()*540/getHeight();int a=e.getActionMasked();if(a==MotionEvent.ACTION_DOWN){
+    if(state==HOME){if(yy>282&&yy<336)start();else if(yy>348&&yy<400)state=xx<370?MODES:xx<590?SHOP:QUEST;else if(yy>411&&yy<466)state=xx<370?STATS:xx<590?CHEST:OPTIONS;}
+    else if(state==PLAY){if(xx>870&&yy<70)state=PAUSE;else{long t=System.currentTimeMillis();if(t-tap<340&&dashCooldown<=0){dash=.35f;dashCooldown=5;invincible=Math.max(invincible,.35f);burst(x,y,0xff28ead7,22);}tap=t;touched=true;target=xx;}}
+    else if(state==TUTORIAL){if(yy>335){seenTutorial=true;save();state=PLAY;last=System.nanoTime();}}
+    else if(state==PAUSE||state==DEAD){if(yy>280&&yy<335){if(state==DEAD)start();else state=PLAY;}else if(yy>352&&yy<413)state=HOME;last=System.nanoTime();}
+    else if(xx<210&&yy>450){state=HOME;}
+    else if(state==MODES){if(yy>145&&yy<203){mode=Math.max(0,Math.min(2,(int)((xx-150)/224)));save();}else if(yy>270&&yy<326){int w=(int)((xx-55)/224);if(w>=0&&w<4&&level>=w*3+1){world=w;save();}}}
+    else if(state==SHOP){if(yy>168&&yy<405){int row=yy<270?0:1,col=Math.round((xx-145)/135);int idx=row*6+col;if(idx>=0&&idx<12){if((unlocked&(1<<idx))!=0)skin=idx;else if(coins>=80+idx*40){coins-=80+idx*40;unlocked|=1<<idx;skin=idx;}save();}}}
+    else if(state==QUEST){if(yy>360&&yy<422){rollover();if(dayCoins>=15&&(claims&1)==0){coins+=60;claims|=1;}if(dayRuns>=3&&(claims&2)==0){coins+=40;claims|=2;}if(weekRuns>=10&&(claims&4)==0){coins+=200;claims|=4;}updateAchievements();save();}}
+    else if(state==CHEST){if(yy>310&&yy<375&&coins>=100){ArrayList<Integer> locked=new ArrayList<>();for(int i=1;i<12;i++)if((unlocked&(1<<i))==0)locked.add(i);if(!locked.isEmpty()){int idx=locked.get(rng.nextInt(locked.size()));coins-=100;unlocked|=1<<idx;skin=idx;save();}}}
+    else if(state==OPTIONS){if(yy>150&&yy<208){if(xx<480)fps=fps==60?30:60;else quality=1-quality;}else if(yy>230&&yy<292){if(xx<480)music=1-music;else effects=1-effects;}else if(yy>310&&yy<370)control=1-control;save();}
+   }else if(a==MotionEvent.ACTION_MOVE&&state==PLAY&&touched){target=control==0?xx:x+(xx-480)*.1f;}else if(a==MotionEvent.ACTION_UP||a==MotionEvent.ACTION_CANCEL)touched=false;
+   invalidate();return true;}
  }
 }
