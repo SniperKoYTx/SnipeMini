@@ -38,7 +38,10 @@ public class MainActivity extends Activity {
   final SharedPreferences prefs;
   final RectF rect=new RectF();
   final int WHITE=Color.WHITE, CYAN=0xff36f5df, PINK=0xffff4c83, GOLD=0xffffd66b;
-  int state=MENU, best, lives=3, coins=0, wallet=0, skin=0, unlocked=1, mode=0, level=1, totalRuns=0, totalCoins=0, kills=0, dailyDay=0, missionRewarded=0;\n  int menuPage=0, bossHp=0, bossMax=0, bossStage=0;\n  float magnet=0, slow=0, bossX=480, bossTime=0;\n  final int[] skins={0xff36f5df,0xffffd66b,0xffff4c83,0xffae8bff,0xff73ff85,0xffffffff};
+  int state=MENU, best, lives=3, coins=0, wallet=0, skin=0, unlocked=1, mode=0, level=1, totalRuns=0, totalCoins=0, kills=0, dailyDay=0, missionRewarded=0;
+  int menuPage=0, bossHp=0, bossMax=0, bossStage=0;
+  float magnet=0, slow=0, bossX=480, bossTime=0;
+  final int[] skins={0xff36f5df,0xffffd66b,0xffff4c83,0xffae8bff,0xff73ff85,0xffffffff};
   boolean muted=false, dragging=false, audioRunning=true;
   float px=480,tx=480,py=420,elapsed=0,spawn=0,score=0,shield=0,invuln=0,shake=0,background=0;
   long last=System.nanoTime();
@@ -56,7 +59,8 @@ public class MainActivity extends Activity {
   void round(Canvas c,float l,float t,float r,float b,float rad,int color){fill(color);rect.set(l,t,r,b);c.drawRoundRect(rect,rad,rad,p);}
   void label(Canvas c,String s,float x,float y,int size,int color){fill(color);p.setTextAlign(Paint.Align.CENTER);p.setTypeface(android.graphics.Typeface.create("sans-serif",1));p.setTextSize(size);c.drawText(s,x,y,p);}
   void button(Canvas c,String s,float l,float t,float r,float b,int color){round(c,l,t,r,b,14,color);label(c,s,(l+r)/2,(t+b)/2+8,23,0xff071326);}
-  void save(){prefs.edit().putInt("best",best).putInt("wallet",wallet).putInt("skin",skin).putInt("unlocked",unlocked).putInt("level",level).putInt("runs",totalRuns).putInt("coins",totalCoins).putInt("daily",dailyDay).putInt("mission",missionRewarded).apply();}\n  void begin(){obstacles.clear();particles.clear();px=480;tx=480;elapsed=0;spawn=.8f;score=0;shield=0;invuln=0;shake=0;lives=mode==2?1:3;coins=0;magnet=0;slow=0;bossHp=0;bossStage=0;totalRuns++;save();dragging=false;state=PLAY;last=System.nanoTime();}
+  void save(){prefs.edit().putInt("best",best).putInt("wallet",wallet).putInt("skin",skin).putInt("unlocked",unlocked).putInt("level",level).putInt("runs",totalRuns).putInt("coins",totalCoins).putInt("daily",dailyDay).putInt("mission",missionRewarded).apply();}
+  void begin(){obstacles.clear();particles.clear();px=480;tx=480;elapsed=0;spawn=.8f;score=0;shield=0;invuln=0;shake=0;lives=mode==2?1:3;coins=0;magnet=0;slow=0;bossHp=0;bossStage=0;totalRuns++;save();dragging=false;state=PLAY;last=System.nanoTime();}
   void back(){if(state==PLAY)state=PAUSE;else if(state==PAUSE)state=PLAY;else state=MENU;invalidate();}
   void suspend(){if(state==PLAY)state=PAUSE;audioRunning=false;if(audio!=null){try{audio.pause();}catch(Exception ignored){}}}
   void resumeAudio(){audioRunning=true;last=System.nanoTime();if(audio!=null&&!muted){try{audio.play();}catch(Exception ignored){}}}
@@ -113,12 +117,16 @@ public class MainActivity extends Activity {
     if(Math.abs((b.x+b.w/2)-px)<b.w/2+22&&Math.abs((b.y+b.h/2)-py)<b.h/2+21){
      obstacles.remove(i);
      if(b.type==1){coins++;wallet++;totalCoins++;score+=45;save();burst(px,py,GOLD,13);}
-     else if(b.type==2){shield=5;burst(px,py,CYAN,14);}\n     else if(b.type==3){magnet=7;burst(px,py,GOLD,14);}\n     else if(b.type==4){slow=6;burst(px,py,0xffae8bff,14);}
+     else if(b.type==2){shield=5;burst(px,py,CYAN,14);}
+     else if(b.type==3){magnet=7;burst(px,py,GOLD,14);}
+     else if(b.type==4){slow=6;burst(px,py,0xffae8bff,14);}
      else if(shield>0){shield=0;burst(px,py,CYAN,18);}
      else if(invuln<=0){lives--;invuln=1.2f;shake=1;burst(px,py,PINK,25);if(lives<=0){state=OVER;int s=(int)score;if(s>best)best=s;level=Math.max(level,1+(int)(score/250));save();}}
     }
    }
-   if(rnd.nextFloat()<dt*12)burst(px,py+23,skins[skin],1);\n   if(mode==1){int stage=1+(int)(elapsed/40);if(stage>bossStage){bossStage=stage;bossHp=5+stage*2;bossMax=bossHp;}if(bossHp>0){bossTime+=dt;bossX=480+(float)Math.sin(bossTime*1.4)*290;if(bossTime>1.6f){bossTime=0;obstacles.add(new Obstacle(bossX,-20,70,28,270+stage*12,0));}if(Math.abs(px-bossX)<75&&rnd.nextFloat()<dt*.5f){bossHp--;score+=20;burst(bossX,100,PINK,5);}}}\n   level=Math.max(level,1+(int)(score/250));
+   if(rnd.nextFloat()<dt*12)burst(px,py+23,skins[skin],1);
+   if(mode==1){int stage=1+(int)(elapsed/40);if(stage>bossStage){bossStage=stage;bossHp=5+stage*2;bossMax=bossHp;}if(bossHp>0){bossTime+=dt;bossX=480+(float)Math.sin(bossTime*1.4)*290;if(bossTime>1.6f){bossTime=0;obstacles.add(new Obstacle(bossX,-20,70,28,270+stage*12,0));}if(Math.abs(px-bossX)<75&&rnd.nextFloat()<dt*.5f){bossHp--;score+=20;burst(bossX,100,PINK,5);}}}
+   level=Math.max(level,1+(int)(score/250));
   }
   @Override protected void onDraw(Canvas raw){
    super.onDraw(raw);
@@ -150,7 +158,8 @@ public class MainActivity extends Activity {
    if(state==PLAY||state==PAUSE){
     label(c,"SCORE "+(int)score,130,48,24,WHITE);
     label(c,"BEST "+best,465,48,20,0xff9aaed1);
-    label(c,"HP "+lives+"   COINS "+coins+"   LV "+level,745,48,19,GOLD);\n    if(mode==1&&bossHp>0){round(c,345,68,615,78,4,0xff35415e);round(c,345,68,345+270f*bossHp/bossMax,78,4,PINK);}
+    label(c,"HP "+lives+"   COINS "+coins+"   LV "+level,745,48,19,GOLD);
+    if(mode==1&&bossHp>0){round(c,345,68,615,78,4,0xff35415e);round(c,345,68,345+270f*bossHp/bossMax,78,4,PINK);}
     round(c,875,16,947,66,12,0xff293554);label(c,"II",911,51,25,WHITE);
    }
    if(state==MENU){
@@ -184,7 +193,8 @@ public class MainActivity extends Activity {
    int action=e.getActionMasked();float x=e.getX()*960/getWidth(),y=e.getY()*540/getHeight();
    if(action==MotionEvent.ACTION_DOWN){
     if(state==MENU){if(y>165&&y<224&&x>345&&x<615){begin();}else if(y>235&&y<290){menuPage=x<480?1:2;state=MENU+4;}else if(y>299&&y<355){menuPage=x<480?3:4;state=MENU+4;}else if(y>365&&y<423&&x>345&&x<615){int today=(int)(System.currentTimeMillis()/86400000L);if(today>dailyDay){dailyDay=today;wallet+=25;save();burst(480,380,GOLD,30);}}else if(y>485&&x>745){muted=!muted;prefs.edit().putBoolean("muted",muted).apply();if(audio!=null){try{if(muted)audio.pause();else audio.play();}catch(Exception ignored){}}}}
-    else if(state==MENU+4){if(y>460){state=MENU;}else if(menuPage==1){if(y>180&&y<240)mode=0;else if(y>245&&y<305)mode=1;else if(y>310&&y<370)mode=2;}else if(menuPage==2&&y>200&&y<320){int idx=(int)((x-215)/106);if(idx>=0&&idx<6&&x>=215+idx*106&&x<=287+idx*106){if((unlocked&(1<<idx))!=0)skin=idx;else if(wallet>=50){wallet-=50;unlocked|=1<<idx;skin=idx;}save();}}else if(menuPage==3&&y>320&&y<390&&missionRewarded==0&&totalCoins>=20&&totalRuns>=5&&level>=5){wallet+=100;missionRewarded=1;save();}}\n    else if(state==PLAY){if(x>860&&y<80){state=PAUSE;dragging=false;}else{dragging=true;tx=x;}}
+    else if(state==MENU+4){if(y>460){state=MENU;}else if(menuPage==1){if(y>180&&y<240)mode=0;else if(y>245&&y<305)mode=1;else if(y>310&&y<370)mode=2;}else if(menuPage==2&&y>200&&y<320){int idx=(int)((x-215)/106);if(idx>=0&&idx<6&&x>=215+idx*106&&x<=287+idx*106){if((unlocked&(1<<idx))!=0)skin=idx;else if(wallet>=50){wallet-=50;unlocked|=1<<idx;skin=idx;}save();}}else if(menuPage==3&&y>320&&y<390&&missionRewarded==0&&totalCoins>=20&&totalRuns>=5&&level>=5){wallet+=100;missionRewarded=1;save();}}
+    else if(state==PLAY){if(x>860&&y<80){state=PAUSE;dragging=false;}else{dragging=true;tx=x;}}
     else if(state==PAUSE||state==OVER){if(y>275&&y<340){if(state==OVER)begin();else{state=PLAY;last=System.nanoTime();}}else if(y>345&&y<410){state=MENU;}}
    }else if(action==MotionEvent.ACTION_MOVE&&state==PLAY&&dragging)tx=x;
    else if(action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_CANCEL)dragging=false;
