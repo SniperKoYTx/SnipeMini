@@ -65,11 +65,11 @@ func _setup_environment() -> void:
  light.light_energy = 1.4
  add_child(light)
  camera = Camera3D.new()
- camera.position = Vector3(0, 10.5, 9.7)
- camera.look_at(Vector3(0, -0.1, 0), Vector3.UP)
- camera.fov = 48
- camera.current = true
+ camera.position = Vector3(0, 9.0, 8.4)
+ camera.fov = 55
  add_child(camera)
+ camera.look_at(Vector3(0, -0.1, 0), Vector3.UP)
+ camera.make_current()
  _cube(self, Vector3(0,-1.25,0), Vector3(8,0.5,9), Color("#74513a"))
  for i in range(10):
   var x := -3.8 if i % 2 == 0 else 3.8
@@ -126,23 +126,27 @@ func _setup_hud() -> void:
  hud = CanvasLayer.new()
  add_child(hud)
  var ui := Control.new()
- ui.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
  hud.add_child(ui)
+ ui.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+ ui.mouse_filter = Control.MOUSE_FILTER_IGNORE
  title_label = Label.new()
  title_label.text = "UNBURIED"
  title_label.add_theme_font_size_override("font_size",42)
  title_label.add_theme_color_override("font_color",Color("#ffe0a3"))
  title_label.position = Vector2(28,30)
+ title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
  ui.add_child(title_label)
  status_label = Label.new()
  status_label.position = Vector2(28,100)
  status_label.add_theme_font_size_override("font_size",24)
  status_label.add_theme_color_override("font_color",Color.WHITE)
+ status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
  ui.add_child(status_label)
  toast_label = Label.new()
  toast_label.position = Vector2(30,180)
  toast_label.add_theme_font_size_override("font_size",25)
  toast_label.add_theme_color_override("font_color",Color("#fff2b4"))
+ toast_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
  ui.add_child(toast_label)
  var bar := HBoxContainer.new()
  bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
@@ -150,6 +154,7 @@ func _setup_hud() -> void:
  bar.offset_bottom = -20
  bar.offset_left = 20
  bar.offset_right = -20
+ bar.mouse_filter = Control.MOUSE_FILTER_PASS
  bar.add_theme_constant_override("separation",12)
  ui.add_child(bar)
  buy_button = Button.new()
