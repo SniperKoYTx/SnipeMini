@@ -215,7 +215,7 @@ func _dig_screen(pos: Vector2) -> void:
  var point := origin+direction*distance
  var cx := int(round(point.x/SIZE+float(NX-1)/2.0))
  var cy := int(round(point.z/SIZE+float(NY-1)/2.0))
- var radius := 1 if tool<3 else 2
+ var radius := 1 if tool<4 else 2
  if Time.get_ticks_msec()-last_dig_ms < 75:
   return
  last_dig_ms = Time.get_ticks_msec()
@@ -300,7 +300,7 @@ func _save_progress() -> void:
  var file := FileAccess.open("user://unburied.save",FileAccess.WRITE)
  if file==null:
   return
- file.store_var({"money":money,"tool":tool,"site":site,"depth":depth,"found":found,"discovery_count":discovery_count})
+ file.store_var({"save_version":2,"money":money,"tool":tool,"site":site,"depth":depth,"found":found,"discovery_count":discovery_count})
 
 func _load_progress() -> void:
  depth.fill(3)
@@ -311,6 +311,8 @@ func _load_progress() -> void:
   return
  var data = file.get_var()
  if not data is Dictionary:
+  return
+ if int(data.get("save_version",0))<2:
   return
  money=int(data.get("money",0))
  tool=clampi(int(data.get("tool",1)),1,6)
