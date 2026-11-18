@@ -10,8 +10,8 @@ android {
         applicationId 'cz.nexora.tv'
         minSdk 23
         targetSdk 28
-        versionCode 4
-        versionName '3.2.1'
+        versionCode 5
+        versionName '3.4.0'
     }
     buildTypes {
         release {
