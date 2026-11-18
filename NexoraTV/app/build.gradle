@@ -1,8 +1,28 @@
-plugins { id 'com.android.application' }
+plugins {
+    id 'com.android.application'
+}
+
 android {
- namespace 'cz.nexora.tv'
- compileSdk 35
- defaultConfig { applicationId 'cz.nexora.tv'; minSdk 23; targetSdk 28; versionCode 4; versionName '3.2.1' }
- buildTypes { release { minifyEnabled false } debug { debuggable true } }
- compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    namespace 'cz.nexora.tv'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'cz.nexora.tv'
+        minSdk 23
+        targetSdk 28
+        versionCode 4
+        versionName '3.2.1'
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+        debug {
+            debuggable true
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
 }
