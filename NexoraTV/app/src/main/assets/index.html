@@ -253,6 +253,77 @@ function visibleFocusable(){const arr=[...document.querySelectorAll('nav button,
 function moveFocus(key){const list=visibleFocusable();if(!list.length)return;const active=document.activeElement;const base=active?.getBoundingClientRect?.();if(!base||!list.includes(active)){list[0].focus();return}const ax=base.left+base.width/2, ay=base.top+base.height/2;let match=null,best=Infinity;for(const el of list){if(el===active)continue;const r=el.getBoundingClientRect(),dx=r.left+r.width/2-ax,dy=r.top+r.height/2-ay;const primary=key==='ArrowRight'?dx:key==='ArrowLeft'?-dx:key==='ArrowDown'?dy:-dy;const side=(key==='ArrowRight'||key==='ArrowLeft')?Math.abs(dy):Math.abs(dx);if(primary<=3)continue;const score=primary+side*2.2+(side>primary*2?500:0);if(score<best){best=score;match=el}}if(match){match.focus({preventScroll:true});match.scrollIntoView({block:'nearest',inline:'nearest',behavior:state.motion?'smooth':'instant'})}}
 load();if(nativeBridge && apps.length && !state.favs.length) state.favs=apps.slice(0,5).map(a=>a.id);render();go('home',{focus:false});sync();setInterval(tick,30000);
 document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.page){go(b.dataset.page);return}if(b.dataset.go){go(b.dataset.go);return}if(b.dataset.filter){state.filter=b.dataset.filter;document.querySelectorAll('[data-filter]').forEach(x=>x.classList.toggle('selected',x.dataset.filter===state.filter));render();return}if(b.dataset.open){launchDirect(b.dataset.open);return}if(b.dataset.star){const id=b.dataset.star;setFav(id);const next=document.querySelector(`[data-star="${id}"]`);next?.focus({preventScroll:true});return}if(b.dataset.time){state.time=b.dataset.time;sync();return}if(b.dataset.mood){state.mood=b.dataset.mood;sync();return}if(b.id==='snow-toggle'||b.id==='motion-toggle'){const key=b.id.startsWith('snow')?'snow':'motion';state[key]=!state[key];sync();return}if(b.id==='tv-system-settings'){if(nativeBridge&&window.NexoraAndroid.openSystemSettings)window.NexoraAndroid.openSystemSettings();else showToast('Nastavení televize je dostupné v Android TV.');return}if(b.id==='modal-close'){modalClose();return}if(b.id==='modal-launch'){const a=apps.find(x=>x.id===state.activeApp);if(a&&a.pkg&&nativeBridge){modalClose();window.NexoraAndroid.launchApp(a.pkg)}return}if(b.id==='modal-fave'&&state.activeApp){setFav(state.activeApp);modalClose();return}});
+
+/* Native remote controls: keep UI navigation in JavaScript, not WebView defaults. */
+let remoteGuide=null;
+function closeRemoteGuide(){
+  if(remoteGuide){remoteGuide.remove();remoteGuide=null}
+  const original=window.nexoraRemoteGuideFocus;
+  if(original && original.isConnected)original.focus({preventScroll:true});
+  window.nexoraRemoteGuideFocus=null;
+}
+function showRemoteGuide(){
+  if(remoteGuide){closeRemoteGuide();return}
+  window.nexoraRemoteGuideFocus=document.activeElement;
+  const shade=document.createElement('div');
+  shade.id='nexora-remote-guide';
+  shade.style.cssText='position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(7,10,24,.78);z-index:99999;padding:26px;backdrop-filter:blur(8px)';
+  shade.innerHTML='<div style="max-width:800px;width:100%;border:1px solid rgba(177,204,255,.24);background:#171b36;color:#f2f4ff;border-radius:30px;padding:32px 40px;box-shadow:0 22px 80px #0009;font-family:system-ui,sans-serif"><div style="font-size:12px;font-weight:700;letter-spacing:.16em;color:#bbccfa">NEXORA TV · OVLADAČ</div><h2 style="font-size:34px;margin:8px 0 20px">Ovládání</h2><div style="font-size:19px;line-height:1.8;color:#e2e9fc">Šipky — pohyb v menu<br>OK — okamžitě otevřít aplikaci<br>Back — zpět · Exit — nastavení TV<br>1–4 — Domů / Aplikace / Knihovna / Nastavení<br>5–9 — spustit oblíbenou aplikaci · 0 — Domů<br>Barevná tlačítka — přepínat sekce<br>EPG — Knihovna · Menu — Nastavení · INFO — nápověda<br>CH +/− — posun stránky</div><div style="margin-top:20px;color:#aab6dc;font-size:14px">Hlasitost, napájení, HOME, vstupy a speciální tlačítka streamovacích služeb ovládá Android / Xiaomi.</div><button id="nexora-guide-close" style="margin-top:26px;border:1px solid #8fb7fa;background:#364780;border-radius:999px;color:white;font-size:19px;font-weight:700;padding:14px 28px">Zavřít</button></div>';
+  document.body.appendChild(shade);
+  remoteGuide=shade;
+  shade.addEventListener('click',e=>{if(e.target===shade||e.target.id==='nexora-guide-close')closeRemoteGuide()});
+  shade.querySelector('button').focus({preventScroll:true});
+}
+function remoteBack(){
+  if(remoteGuide){closeRemoteGuide();return}
+  if($('overlay').classList.contains('open')){modalClose();return}
+  if(state.page!=='home'){go('home');return}
+  if(nativeBridge&&window.NexoraAndroid.openSystemSettings)window.NexoraAndroid.openSystemSettings();
+  else showToast('V Android TV otevři nastavení zařízení.');
+}
+window.nexoraRemoteKey=function(action){
+  if(remoteGuide){
+    if(action==='OK'||action==='BACK'||action==='EXIT'||action==='INFO'){closeRemoteGuide()}
+    return;
+  }
+  if(action==='INFO'){showRemoteGuide();return}
+  if(action==='BACK'){remoteBack();return}
+  if(action==='EXIT'){
+    if(nativeBridge&&window.NexoraAndroid.openSystemSettings)window.NexoraAndroid.openSystemSettings();
+    else go('home');
+    return;
+  }
+  if(action==='MENU'){if($('overlay').classList.contains('open'))modalClose();go('settings');return}
+  if(action==='SYS_SETTINGS'){
+    if(nativeBridge&&window.NexoraAndroid.openSystemSettings)window.NexoraAndroid.openSystemSettings();
+    else go('settings');
+    return;
+  }
+  if(action==='GUIDE'||action==='YELLOW'){go('library');return}
+  if(action==='RED'||action==='NUM_0'){go('home');return}
+  if(action==='GREEN'){go('apps');return}
+  if(action==='BLUE'){go('settings');return}
+  if(action==='UP'||action==='DOWN'||action==='LEFT'||action==='RIGHT'){
+    moveFocus('Arrow'+action.slice(0,1)+action.slice(1).toLowerCase());return;
+  }
+  if(action==='OK'){
+    const el=document.activeElement;
+    if(el&&el.tagName==='BUTTON'&&!el.disabled){el.click()}
+    else{const btn=visibleFocusable()[0];if(btn){btn.focus({preventScroll:true});btn.click()}}
+    return;
+  }
+  if(action==='CH_UP'||action==='CH_DOWN'){
+    const scroller=document.getElementById('page-'+state.page);
+    if(scroller)scroller.scrollBy({top:action==='CH_UP'?-350:350,behavior:state.motion?'smooth':'auto'});
+    return;
+  }
+  if(/^NUM_[1-9]$/.test(action)){
+    const digit=Number(action.slice(4));
+    if(digit<=4){go(['home','apps','library','settings'][digit-1]);return}
+    const id=state.favs[digit-5];if(id)launchDirect(id);else showToast('Tato zkratka zatím není obsazená.');
+  }
+};
+
 document.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();moveFocus(e.key);return}if(['Escape','Backspace','BrowserBack'].includes(e.key)){e.preventDefault();if($('overlay').classList.contains('open'))modalClose();else if(state.page!=='home')go('home');else if(nativeBridge && window.NexoraAndroid.openSystemSettings)window.NexoraAndroid.openSystemSettings();return}if($('overlay').classList.contains('open')&&e.key==='Tab'){const b=visibleFocusable(),idx=b.indexOf(document.activeElement);if(e.shiftKey&&idx===0){e.preventDefault();b[b.length-1].focus()}else if(!e.shiftKey&&idx===b.length-1){e.preventDefault();b[0].focus()}return}if(['1','2','3','4'].includes(e.key)&&!$('overlay').classList.contains('open')){go(['home','apps','library','settings'][Number(e.key)-1])}});
 $('overlay').addEventListener('click',e=>{if(e.target===$('overlay'))modalClose()});
 })();

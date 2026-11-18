@@ -175,6 +175,60 @@ public class MainActivity extends Activity {
         return super.onKeyDown(keyCode,event);
     }
 
+
+    // Android TV remote: handle keys before WebView so DPAD/OK never get lost.
+    // OEM/system keys (HOME, volume, power, dedicated media-app buttons,
+    // input/source and voice assistant) are intentionally left to Android.
+    private String remoteCommand(int code) {
+        if (code >= KeyEvent.KEYCODE_0 && code <= KeyEvent.KEYCODE_9)
+            return "NUM_" + (code - KeyEvent.KEYCODE_0);
+        if (code >= KeyEvent.KEYCODE_NUMPAD_0 && code <= KeyEvent.KEYCODE_NUMPAD_9)
+            return "NUM_" + (code - KeyEvent.KEYCODE_NUMPAD_0);
+        switch (code) {
+            case KeyEvent.KEYCODE_DPAD_UP: return "UP";
+            case KeyEvent.KEYCODE_DPAD_DOWN: return "DOWN";
+            case KeyEvent.KEYCODE_DPAD_LEFT: return "LEFT";
+            case KeyEvent.KEYCODE_DPAD_RIGHT: return "RIGHT";
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_NUMPAD_ENTER:
+            case KeyEvent.KEYCODE_BUTTON_A:
+            case KeyEvent.KEYCODE_BUTTON_SELECT: return "OK";
+            case KeyEvent.KEYCODE_BACK:
+            case KeyEvent.KEYCODE_ESCAPE:
+            case KeyEvent.KEYCODE_BUTTON_B: return "BACK";
+            case KeyEvent.KEYCODE_MENU:
+            case KeyEvent.KEYCODE_TV_CONTENTS_MENU: return "MENU";
+            case KeyEvent.KEYCODE_SETTINGS: return "SYS_SETTINGS";
+            case KeyEvent.KEYCODE_INFO: return "INFO";
+            case KeyEvent.KEYCODE_GUIDE: return "GUIDE";
+            case KeyEvent.KEYCODE_PROG_RED: return "RED";
+            case KeyEvent.KEYCODE_PROG_GREEN: return "GREEN";
+            case KeyEvent.KEYCODE_PROG_YELLOW: return "YELLOW";
+            case KeyEvent.KEYCODE_PROG_BLUE: return "BLUE";
+            case KeyEvent.KEYCODE_CHANNEL_UP: return "CH_UP";
+            case KeyEvent.KEYCODE_CHANNEL_DOWN: return "CH_DOWN";
+            default: return null;
+        }
+    }
+
+    @Override public boolean dispatchKeyEvent(KeyEvent event) {
+        final String action = remoteCommand(event.getKeyCode());
+        if (action != null && web != null) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                boolean continuous = action.equals("UP") || action.equals("DOWN") ||
+                    action.equals("LEFT") || action.equals("RIGHT") ||
+                    action.equals("CH_UP") || action.equals("CH_DOWN");
+                if (event.getRepeatCount() == 0 || continuous) {
+                    web.evaluateJavascript("window.nexoraRemoteKey && window.nexoraRemoteKey('" + action + "');", null);
+                }
+            }
+            // Eat KEY_UP too; otherwise WebView may double-fire click/Enter.
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
     @Override protected void onDestroy() {
         if (web != null) {
             web.removeJavascriptInterface("NexoraAndroid");
