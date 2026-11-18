@@ -139,6 +139,21 @@ public class MainActivity extends Activity {
             });
         }
 
+        @JavascriptInterface public void openSystemSettings() {
+            runOnUiThread(new Runnable() {
+                @Override public void run() {
+                    try {
+                        Intent i = new Intent(android.provider.Settings.ACTION_SETTINGS);
+                        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(i);
+                    } catch (Exception e) {
+                        Toast.makeText(MainActivity.this,
+                            "Nastaveni TV se nepodarilo otevrit", Toast.LENGTH_SHORT).show();
+                    }
+                }
+            });
+        }
+
         @JavascriptInterface public void openHomeSettings() {
             runOnUiThread(new Runnable() {
                 @Override public void run() {
